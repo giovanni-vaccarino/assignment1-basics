@@ -11,17 +11,19 @@ class MultiHeadSelfAttention(nn.Module):
                  num_heads,
                  theta=0.0,
                  max_seq_len=0,
-                 rope=False):
+                 rope=False,
+                 device=None,
+                 dtype=None):
         super().__init__()
         self.num_heads = num_heads
         self.d_model = d_model
         self.is_rope = rope
         if rope:
-            self.rope = RoPE(theta, d_model // num_heads, max_seq_len) 
-        self.W_q = Linear(d_model, d_model)
-        self.W_k = Linear(d_model, d_model)
-        self.W_v = Linear(d_model, d_model)
-        self.W_o = Linear(d_model, d_model)
+            self.rope = RoPE(theta, d_model // num_heads, max_seq_len, device=device) 
+        self.W_q = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.W_k = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.W_v = Linear(d_model, d_model, device=device, dtype=dtype)
+        self.W_o = Linear(d_model, d_model, device=device, dtype=dtype)
 
     def forward(self, x, token_positions=None):
         # one could also have a unique matrix for Q, K, V
