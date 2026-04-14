@@ -405,7 +405,38 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    from cs336_basics.scripts.transformer import Transformer
+
+    model = Transformer(
+        vocab_size=vocab_size,
+        context_length=context_length,
+        d_model=d_model,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        eps=1e-5,
+        theta=rope_theta,
+        is_rope=True,
+    )
+
+    model.embedding.emb_matrix = torch.nn.Parameter(weights["token_embeddings.weight"])
+    model.rms_norm.g = torch.nn.Parameter(weights["ln_final.weight"])
+    model.linear.W = torch.nn.Parameter(weights["lm_head.weight"])
+
+    for i in range(num_layers):
+        layer = model.transformer_layers[i]
+        p = f"layers.{i}"
+        layer.mha.W_q.W = torch.nn.Parameter(weights[f"{p}.attn.q_proj.weight"])
+        layer.mha.W_k.W = torch.nn.Parameter(weights[f"{p}.attn.k_proj.weight"])
+        layer.mha.W_v.W = torch.nn.Parameter(weights[f"{p}.attn.v_proj.weight"])
+        layer.mha.W_o.W = torch.nn.Parameter(weights[f"{p}.attn.output_proj.weight"])
+        layer.rms_norm_mha.g = torch.nn.Parameter(weights[f"{p}.ln1.weight"])
+        layer.rms_norm_ffn.g = torch.nn.Parameter(weights[f"{p}.ln2.weight"])
+        layer.ffn.w1 = torch.nn.Parameter(weights[f"{p}.ffn.w1.weight"])
+        layer.ffn.w2 = torch.nn.Parameter(weights[f"{p}.ffn.w2.weight"])
+        layer.ffn.w3 = torch.nn.Parameter(weights[f"{p}.ffn.w3.weight"])
+
+    return model(in_indices)
 
 
 def run_rmsnorm(
