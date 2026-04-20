@@ -1,4 +1,3 @@
-from einops import reduce
 
 def gradient_clipping(params, max_norm, eps=1e-6):
     total_norm = 0.0
