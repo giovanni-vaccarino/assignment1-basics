@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import time
+import wandb
 from cs336_basics.scripts.transformer import Transformer
 from cs336_basics.scripts.training.adamw import AdamW
 from cs336_basics.scripts.training.cross_entropy import cross_entropy
@@ -36,8 +37,34 @@ def training(x_train: np.array,
             out,
             batch_size,
             batch_context_length,
-            device):
+            device,
+            wandb_project: str = "cs336-tinystories",
+            wandb_run_name: str | None = None):
     
+    wandb.init(
+        project=wandb_project,
+        name=wandb_run_name,
+        config=dict(
+            vocab_size=vocab_size,
+            context_length=context_length,
+            num_layers=num_layers,
+            d_model=d_model,
+            num_heads=num_heads,
+            d_ff=d_ff,
+            eps=eps,
+            theta=theta,
+            is_rope=is_rope,
+            lr_max=lr_max,
+            lr_min=lr_min,
+            T_w=T_w,
+            T_c=T_c,
+            weight_decay=weight_decay,
+            batch_size=batch_size,
+            batch_context_length=batch_context_length,
+            total_steps=total_steps,
+        ),
+    )
+
     model = Transformer(
         vocab_size,
         context_length,
@@ -89,7 +116,15 @@ def training(x_train: np.array,
             model.train()
             passed_time = time.time() - start_time
             print(f"Step {step} | train loss: {loss.item():.4f} | val loss: {val_loss:.4f} | time: {passed_time}")
+            wandb.log({
+                "train/loss": loss.item(),
+                "val/loss": val_loss,
+                "lr": lr,
+                "elapsed_sec": passed_time,
+            }, step=step)
 
         if step > 0 and step % checkpoint_interval == 0:
             save_checkpoint(model, optimizer, step, out)
+
+    wandb.finish()
         
