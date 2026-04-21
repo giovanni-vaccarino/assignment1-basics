@@ -1,9 +1,11 @@
 import os
+import sys
 from typing import BinaryIO
 from multiprocessing import Pool
 import regex as re
 import cProfile
 import pstats
+from tqdm import tqdm
 
 def find_chunk_boundaries(
     file: BinaryIO,
@@ -109,7 +111,8 @@ def train_tokenizer(input_path:str, vocab_size: int, special_tokens: list[str]):
     for dic in result:
         for k, v in dic.items():
             pre_tokens[k] = pre_tokens.get(k, 0) + v
-    
+    print(f"Pre-tokenization done: {len(pre_tokens):,} unique pre-tokens", flush=True)
+
     pair_occs = {} # key: tuple of the pair ; value: occurrencies of that pair
 
     for pre_token in pre_tokens:
@@ -118,7 +121,7 @@ def train_tokenizer(input_path:str, vocab_size: int, special_tokens: list[str]):
     
     merges = []
     # Compute BPE merges
-    for _ in range(num_merges):
+    for _ in tqdm(range(num_merges), desc="BPE merges", unit="merge", file=sys.stdout, dynamic_ncols=False):
         # 1. Identify the most frequent pair   
         max_pair = max(pair_occs, key=lambda x: (pair_occs[x], x))
 

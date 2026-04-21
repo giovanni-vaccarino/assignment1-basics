@@ -1,26 +1,32 @@
 import numpy as np
 import torch
-from einops import repeat
 
-def data_loader(x: np.array, batch_size: int, context_length: int, device: str):
-    # start_indexes = torch.randint(0, x.shape[0] - context_length, tuple([batch_size]))
-    # indexes = torch.stack([torch.arange(index, index + context_length, 1) for index in start_indexes])
-    # indexes_targets = torch.stack([torch.arange(index + 1, index + context_length + 1, 1) for index in start_indexes])
-    # x = repeat(x, "n -> b n", b=batch_size)
-    # x_tokens = torch.gather(torch.tensor(x), -1, indexes).to(device)
-    # y_tokens = torch.gather(torch.tensor(x), -1, indexes_targets).to(device)
-    # return x_tokens, y_tokens
 
-    # more efficient version with broadcasting
+def data_loader(
+    dataset: np.ndarray | str,
+    batch_size: int,
+    context_length: int,
+    device: str,
+    dtype: np.dtype = np.uint16,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Sample a random batch from a token array or a memory-mapped .npy file.
+
+    Args:
+        dataset: Either a numpy array already in memory, or a path to a .npy
+                 file that will be loaded via mmap (no RAM copy of the full file).
+        dtype:   Must match the dtype used when the .npy file was saved (uint16
+                 for vocab sizes ≤ 65535).  Ignored when dataset is already an array.
+    """
+    if isinstance(dataset, str):
+        x = np.load(dataset, mmap_mode="r").view(dtype)
+        assert x.max() < np.iinfo(dtype).max, (
+            f"Token values exceed dtype {dtype} range — dtype mismatch?"
+        )
+    else:
+        x = dataset
+
     start_indexes = np.random.randint(0, len(x) - context_length, batch_size)
-    # shape: (batch_size, context_length)
     indexes = start_indexes[:, None] + np.arange(context_length)[None, :]
-    x_tokens = torch.tensor(x[indexes], dtype=torch.long).to(device)
-    y_tokens = torch.tensor(x[indexes + 1], dtype=torch.long).to(device)
+    x_tokens = torch.tensor(x[indexes].astype(np.int64), dtype=torch.long).to(device)
+    y_tokens = torch.tensor(x[indexes + 1].astype(np.int64), dtype=torch.long).to(device)
     return x_tokens, y_tokens
-
-x = np.array([10, 12, 43, 31, 53, 75])
-
-x, y = data_loader(x, 3, 2, "cpu")
-print(x)
-print(y)
