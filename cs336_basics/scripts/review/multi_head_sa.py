@@ -36,9 +36,9 @@ class MHA(nn.Module):
         T = x.shape[-2]
         if self.rope is not None:
             if token_positions is None:
-                token_positions = torch.arange(0, Q.shape[-2])
-            Q = self.rope(Q, token_positions)
-            K = self.rope(K, token_positions)
+                token_positions = torch.arange(0, T)
+            Q = self.rope(Q, token_positions[..., None, :])
+            K = self.rope(K, token_positions[..., None, :])
 
         mask = torch.triu(torch.ones((T, T), device=self.device), diagonal=1) == 0
         #mask = torch.tril(torch.ones(T, T, dtype=bool)) Equivalent
@@ -53,5 +53,8 @@ class MHA(nn.Module):
 
 # print(a == 0)
 
+x = torch.randn((2, 4, 6))
+ar = torch.arange(0, x.shape[-2])
+print(ar.shape)
 
 
