@@ -150,16 +150,15 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    from cs336_basics.scripts.multi_head_sa import MultiHeadSelfAttention
+    from cs336_basics.scripts.review.multi_head_sa import MHA
     from torch import nn
-    model = MultiHeadSelfAttention(d_model, num_heads)
-    #model.load_state_dict({"W_q": q_proj_weight, "W_k": k_proj_weight, "W_v": v_proj_weight, "W_o": o_proj_weight})
-    model.W_q.W = nn.Parameter(q_proj_weight)
-    model.W_k.W = nn.Parameter(k_proj_weight)
-    model.W_v.W = nn.Parameter(v_proj_weight)
-    model.W_o.W = nn.Parameter(o_proj_weight)
 
-    return model(in_features)
+    model = MHA(d_model, num_heads)
+    # single fused QKV projection: stack the three weight matrices along the output dim
+    model.qkv_proj.W = nn.Parameter(torch.cat([q_proj_weight, k_proj_weight, v_proj_weight], dim=0))
+    model.w_o.W = nn.Parameter(o_proj_weight)
+
+    return model(in_features, token_positions=None)
 
 
 def run_multihead_self_attention_with_rope(
@@ -199,13 +198,13 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    from cs336_basics.scripts.multi_head_sa import MultiHeadSelfAttention
+    from cs336_basics.scripts.review.multi_head_sa import MHA
     from torch import nn
-    model = MultiHeadSelfAttention(d_model, num_heads, theta=theta, max_seq_len=max_seq_len, rope=True)
-    model.W_q.W = nn.Parameter(q_proj_weight)
-    model.W_k.W = nn.Parameter(k_proj_weight)
-    model.W_v.W = nn.Parameter(v_proj_weight)
-    model.W_o.W = nn.Parameter(o_proj_weight)
+
+    model = MHA(d_model, num_heads, theta=theta, max_seq_len=max_seq_len)
+    # single fused QKV projection: stack the three weight matrices along the output dim
+    model.qkv_proj.W = nn.Parameter(torch.cat([q_proj_weight, k_proj_weight, v_proj_weight], dim=0))
+    model.w_o.W = nn.Parameter(o_proj_weight)
 
     return model(in_features, token_positions=token_positions)
 
@@ -305,7 +304,7 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    from cs336_basics.scripts.transformer_layer import TransformerLayer
+    from cs336_basics.scripts.review.transformer_layer import TransformerLayer
     from torch import nn
 
     model = TransformerLayer(
@@ -315,18 +314,26 @@ def run_transformer_block(
         eps=1e-5,
         theta=theta,
         max_seq_len=max_seq_len,
-        is_rope=True
     )
 
-    model.mha.W_q.W = nn.Parameter(weights["attn.q_proj.weight"])
-    model.mha.W_k.W = nn.Parameter(weights["attn.k_proj.weight"])
-    model.mha.W_v.W = nn.Parameter(weights["attn.v_proj.weight"])
-    model.mha.W_o.W = nn.Parameter(weights["attn.output_proj.weight"])
-    model.rms_norm_mha.g = nn.Parameter(weights["ln1.weight"])
-    model.rms_norm_ffn.g = nn.Parameter(weights["ln2.weight"])
-    model.ffn.w1 = nn.Parameter(weights["ffn.w1.weight"])
-    model.ffn.w2 = nn.Parameter(weights["ffn.w2.weight"])
-    model.ffn.w3 = nn.Parameter(weights["ffn.w3.weight"])
+    # The MHA module uses a single fused QKV projection, so concatenate the
+    # reference q/k/v weights along the output dimension.
+    model.mha.qkv_proj.W = nn.Parameter(
+        torch.cat(
+            [
+                weights["attn.q_proj.weight"],
+                weights["attn.k_proj.weight"],
+                weights["attn.v_proj.weight"],
+            ],
+            dim=0,
+        )
+    )
+    model.mha.w_o.W = nn.Parameter(weights["attn.output_proj.weight"])
+    model.norm_mha.weight = nn.Parameter(weights["ln1.weight"])
+    model.norm_ffn.weight = nn.Parameter(weights["ln2.weight"])
+    model.ffn.w1.W = nn.Parameter(weights["ffn.w1.weight"])
+    model.ffn.w2.W = nn.Parameter(weights["ffn.w2.weight"])
+    model.ffn.w3.W = nn.Parameter(weights["ffn.w3.weight"])
 
     return model(in_features)
 
@@ -410,36 +417,44 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    from cs336_basics.scripts.transformer import Transformer
+    from cs336_basics.scripts.review.transformer import Transformer
 
     model = Transformer(
         vocab_size=vocab_size,
         context_length=context_length,
-        d_model=d_model,
         num_layers=num_layers,
+        d_model=d_model,
         num_heads=num_heads,
         d_ff=d_ff,
         eps=1e-5,
         theta=rope_theta,
-        is_rope=True,
     )
 
-    model.embedding.emb_matrix = torch.nn.Parameter(weights["token_embeddings.weight"])
-    model.rms_norm.g = torch.nn.Parameter(weights["ln_final.weight"])
-    model.linear.W = torch.nn.Parameter(weights["lm_head.weight"])
+    model.emb.weight = torch.nn.Parameter(weights["token_embeddings.weight"])
+    model.norm_head.weight = torch.nn.Parameter(weights["ln_final.weight"])
+    model.linear_head.W = torch.nn.Parameter(weights["lm_head.weight"])
 
     for i in range(num_layers):
         layer = model.transformer_layers[i]
         p = f"layers.{i}"
-        layer.mha.W_q.W = torch.nn.Parameter(weights[f"{p}.attn.q_proj.weight"])
-        layer.mha.W_k.W = torch.nn.Parameter(weights[f"{p}.attn.k_proj.weight"])
-        layer.mha.W_v.W = torch.nn.Parameter(weights[f"{p}.attn.v_proj.weight"])
-        layer.mha.W_o.W = torch.nn.Parameter(weights[f"{p}.attn.output_proj.weight"])
-        layer.rms_norm_mha.g = torch.nn.Parameter(weights[f"{p}.ln1.weight"])
-        layer.rms_norm_ffn.g = torch.nn.Parameter(weights[f"{p}.ln2.weight"])
-        layer.ffn.w1 = torch.nn.Parameter(weights[f"{p}.ffn.w1.weight"])
-        layer.ffn.w2 = torch.nn.Parameter(weights[f"{p}.ffn.w2.weight"])
-        layer.ffn.w3 = torch.nn.Parameter(weights[f"{p}.ffn.w3.weight"])
+        # The MHA module uses a single fused QKV projection, so concatenate the
+        # reference q/k/v weights along the output dimension.
+        layer.mha.qkv_proj.W = torch.nn.Parameter(
+            torch.cat(
+                [
+                    weights[f"{p}.attn.q_proj.weight"],
+                    weights[f"{p}.attn.k_proj.weight"],
+                    weights[f"{p}.attn.v_proj.weight"],
+                ],
+                dim=0,
+            )
+        )
+        layer.mha.w_o.W = torch.nn.Parameter(weights[f"{p}.attn.output_proj.weight"])
+        layer.norm_mha.weight = torch.nn.Parameter(weights[f"{p}.ln1.weight"])
+        layer.norm_ffn.weight = torch.nn.Parameter(weights[f"{p}.ln2.weight"])
+        layer.ffn.w1.W = torch.nn.Parameter(weights[f"{p}.ffn.w1.weight"])
+        layer.ffn.w2.W = torch.nn.Parameter(weights[f"{p}.ffn.w2.weight"])
+        layer.ffn.w3.W = torch.nn.Parameter(weights[f"{p}.ffn.w3.weight"])
 
     return model(in_indices)
 
