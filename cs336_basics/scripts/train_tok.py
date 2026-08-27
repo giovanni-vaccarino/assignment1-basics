@@ -7,6 +7,12 @@ import cProfile
 import pstats
 from tqdm import tqdm
 
+# Reuse the same 256 single-byte bytes objects everywhere instead of allocating
+# a fresh `bytes([b])` per byte — that overhead is what blew up RAM during
+# pre-tokenization (tens of millions of tiny objects).
+_SINGLE_BYTES = [bytes([i]) for i in range(256)]
+
+
 def find_chunk_boundaries(
     file: BinaryIO,
     desired_num_chunks: int,
@@ -61,6 +67,7 @@ def pre_tokenize(corpus: str, special_tokens: list[str]) -> dict[tuple, int]:
     # 1. First split on special tokens
     delim = "|".join(re.escape(tok) for tok in special_tokens)
     corpus_splits = re.split(delim, corpus)
+    del corpus
 
     # 2. Apply the tokenization to each piece separately
     unique_pre_tokens = {}
@@ -69,10 +76,18 @@ def pre_tokenize(corpus: str, special_tokens: list[str]) -> dict[tuple, int]:
 
         # Useful to have a mapping of unique pre-tokenized tokens and occs
         for pre_token in pre_tokenized_corpus:
-            bytes_tuple = tuple(bytes([b]) for b in (pre_token.group()).encode('utf-8'))
+            bytes_tuple = tuple(_SINGLE_BYTES[b] for b in (pre_token.group()).encode('utf-8'))
             unique_pre_tokens[bytes_tuple] = unique_pre_tokens.get(bytes_tuple, 0) + 1
         
     return unique_pre_tokens
+
+
+def pre_tokenize_chunk(input_path: str, start: int, end: int, special_tokens: list[str]) -> dict[tuple, int]:
+    """Worker: read a byte range from disk and pre-tokenize it."""
+    with open(input_path, "rb") as f:
+        f.seek(start)
+        corpus = f.read(end - start).decode("utf-8", errors="ignore")
+    return pre_tokenize(corpus, special_tokens)
 
 
 def train_tokenizer(input_path:str, vocab_size: int, special_tokens: list[str]):
@@ -83,7 +98,7 @@ def train_tokenizer(input_path:str, vocab_size: int, special_tokens: list[str]):
         - vocab: dict[int, bytes] The tokenizer vocabulary
         - merges: list[tuple[bytes, bytes]] The list of merges applied. Has to be ordered by creation
     """
-    num_workers = 5
+    num_workers = 2
     num_merges = vocab_size - 256 - len(special_tokens)
 
     # 1. Initialize vocab with also special tokens
@@ -91,22 +106,16 @@ def train_tokenizer(input_path:str, vocab_size: int, special_tokens: list[str]):
     for tok in special_tokens:
         vocab[len(vocab)] = tok.encode("utf-8")
     
-    # 2. Extract the corpus from input path file
-    with open(input_path, "rb") as f:
-        data = f.read()
-
-    # 3. Pre-tokenize (in parallel)    
-
+    # 2. Pre-tokenize (in parallel). Workers read their own byte slice from disk
+    #    to avoid loading the entire corpus into the parent process.
     with open(input_path, "rb") as f:
         boundaries = find_chunk_boundaries(f, num_workers, special_tokens[0].encode("utf-8"))
-    
-    # boundaries have to be used as byte offsets like below
-    # print(repr(data[boundaries[1]:boundaries[1]+30]))
-    chunks = [data[boundaries[i]:boundaries[i+1]].decode("utf-8") for i in range(len(boundaries) - 1)]
-    args = [(chunk, special_tokens) for chunk in chunks]
+
+    args = [(input_path, boundaries[i], boundaries[i+1], special_tokens)
+            for i in range(len(boundaries) - 1)]
 
     with Pool(num_workers) as p:
-        result = p.starmap(pre_tokenize, args)
+        result = p.starmap(pre_tokenize_chunk, args)
     pre_tokens = {}
     for dic in result:
         for k, v in dic.items():
