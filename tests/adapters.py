@@ -557,7 +557,8 @@ def run_cross_entropy(
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    from cs336_basics.scripts.training.cross_entropy import cross_entropy
+    #from cs336_basics.scripts.training.cross_entropy import cross_entropy
+    from cs336_basics.scripts.review.training.cross_entropy import cross_entropy
     return cross_entropy(inputs, targets)
 
 
