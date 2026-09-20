@@ -609,8 +609,10 @@ def run_get_lr_cosine_schedule(
     Returns:
         Learning rate at the given iteration under the specified schedule.
     """
-    from cs336_basics.scripts.training.lr_scheduler import cosine_lr_scheduler
-    return cosine_lr_scheduler(it, max_learning_rate, min_learning_rate, warmup_iters, cosine_cycle_iters)
+    #from cs336_basics.scripts.training.lr_scheduler import cosine_lr_scheduler
+    from cs336_basics.scripts.review.training.lr_scheduler import cosine_annealing_lr_scheduler
+    return cosine_annealing_lr_scheduler(it, max_learning_rate, min_learning_rate, warmup_iters, cosine_cycle_iters)
+    #return cosine_lr_scheduler(it, max_learning_rate, min_learning_rate, warmup_iters, cosine_cycle_iters)
 
 
 def run_save_checkpoint(
