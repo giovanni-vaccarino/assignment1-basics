@@ -11,7 +11,7 @@ def gradient_clipping(params: Iterable[torch.nn.Parameter], M: float, eps:float 
     for param in params:
         if param.grad is None:
             continue
-        l2_norm += param.grad.data.norm()**2
+        l2_norm += param.grad.norm()**2
 
     l2_norm = torch.sqrt(l2_norm)
 
