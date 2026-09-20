@@ -571,7 +571,8 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    from cs336_basics.scripts.training.gradient_clipping import gradient_clipping
+    #from cs336_basics.scripts.training.gradient_clipping import gradient_clipping
+    from cs336_basics.scripts.review.training.gradient_clipping import gradient_clipping
     return gradient_clipping(parameters, max_l2_norm)
 
 
