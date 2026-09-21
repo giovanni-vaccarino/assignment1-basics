@@ -55,12 +55,13 @@ class AdamW(optim.Optimizer):
 
 # Quick Testing
 
-weights = nn.Parameter(5 * torch.randn((10, 10)))
-opt = AdamW([weights], lr=1)
+if __name__ == "__main__":
+    weights = nn.Parameter(5 * torch.randn((10, 10)))
+    opt = AdamW([weights], lr=1)
 
-for t in range(100):
-    opt.zero_grad()
-    loss = (weights**2).mean()
-    print(loss.cpu().item())
-    loss.backward()
-    opt.step()
+    for t in range(100):
+        opt.zero_grad()
+        loss = (weights**2).mean()
+        print(loss.cpu().item())
+        loss.backward()
+        opt.step()

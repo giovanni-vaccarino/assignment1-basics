@@ -53,8 +53,9 @@ class MHA(nn.Module):
 
 # print(a == 0)
 
-x = torch.randn((2, 4, 6))
-ar = torch.arange(0, x.shape[-2])
-print(ar.shape)
+if __name__ == "__main__":
+    x = torch.randn((2, 4, 6))
+    ar = torch.arange(0, x.shape[-2])
+    print(ar.shape)
 
 

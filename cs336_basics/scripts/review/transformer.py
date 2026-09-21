@@ -25,7 +25,7 @@ class Transformer(nn.Module):
             for _ in range(num_layers)
         ])
         self.norm_head = RMSNorm(d_model, eps, device=device, dtype=dtype)
-        self.linear_head = Linear(d_model, vocab_size)
+        self.linear_head = Linear(d_model, vocab_size, device=device, dtype=dtype)
 
     def forward(self, tokens: torch.Tensor) -> torch.Tensor:
         x = self.emb(tokens)

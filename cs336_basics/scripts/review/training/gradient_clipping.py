@@ -6,6 +6,7 @@ def gradient_clipping(params: Iterable[torch.nn.Parameter], M: float, eps:float 
     # 1. Compute l2_norm
     # 2. If l2_norm >= M rescale in place
 
+    params = list(params) # params may be a generator (e.g. model.parameters()), we iterate it twice
     l2_norm = 0
 
     for param in params:
@@ -23,6 +24,6 @@ def gradient_clipping(params: Iterable[torch.nn.Parameter], M: float, eps:float 
     for param in params:
         if param.grad is None:
             continue
-        param.grad = param.grad * rescale_factor
+        param.grad.mul_(rescale_factor)
 
     return params
