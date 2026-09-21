@@ -520,7 +520,8 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    from cs336_basics.scripts.training.data_loading import data_loader
+    #from cs336_basics.scripts.training.data_loading import data_loader
+    from cs336_basics.scripts.review.training.data_loading import data_loader
     return data_loader(dataset, batch_size, context_length, device)
 
 
